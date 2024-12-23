@@ -114,6 +114,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import userModel from "../models/userModel.js";
+import transporter from "../config/nodemailer.js";
 
 // Register user
 export const register = async (req, res) => {
@@ -150,7 +151,14 @@ export const register = async (req, res) => {
       sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
-
+    //sending welcome email
+    const mailOptions = {
+      from: process.env.SENDER_EMAIL,
+      to: email,
+      subject: "Welcome to My MERN EMAAIL AUTH Application",
+      text: `Welcome to my application, Your account has been created with email id: ${email}`,
+    };
+    await transporter.sendMail(mailOptions);
     return res.status(201).json({ success: true });
   } catch (error) {
     console.error(error); // Log the error for debugging
@@ -228,6 +236,77 @@ export const logout = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Logout failed",
+    });
+  }
+};
+
+//Email Verification: Send OTP
+export const sendVerifyOtp = async (req, res) => {
+  try {
+    const { userId } = req.body;
+    const user = await userModel.findById(userId);
+    if (user.isAccountVerified) {
+      return res.json({ success: false, message: "Account Already verified" });
+    }
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    user.verifyOtp = otp;
+    user.verifyOtpExpireAt = Date.now() + 24 * 60 * 60 * 1000;
+    await user.save();
+
+    //sending welcome email
+    const mailOptions = {
+      from: process.env.SENDER_EMAIL,
+      to: user.email,
+      subject: "Account Verification OTP",
+      text: `Your OTP is ${otp}, verify your account using this OTP`,
+    };
+    await transporter.sendMail(mailOptions);
+    return res.json({
+      success: true,
+      message:
+        "Verification OTP send to your email, it will expired within 24 hours",
+    });
+  } catch (error) {
+    return res.json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+//Email Verification: Check OTP
+export const verifyEmail = async (req, res) => {
+  const { userId, otp } = req.body;
+  if (!userId || !otp) {
+    return res.json({ success: false, message: "Missing Details" });
+  }
+  try {
+    const user = await userModel.findById(userId);
+    if (!user) {
+      return res.json({ success: false, message: "User not available" });
+    }
+    if (user.verifyOtp === "" || user.verifyOtp !== otp) {
+      return res.json({ success: false, message: "Invalid OTP" });
+    }
+
+    if (user.verifyOtpExpireAt < Date.now()) {
+      return res.json({
+        success: false,
+        message: "OTP Expired",
+      });
+    }
+    user.isAccountVerified = true;
+    user.verifyOtp = "";
+    user.verifyOtpExpireAt = 0;
+    await user.save();
+    return res.json({
+      success: true,
+      message: "Email Verified Successfully",
+    });
+  } catch (error) {
+    return res.json({
+      success: false,
+      message: error.message,
     });
   }
 };

@@ -9,5 +9,6 @@ authRouter.post("/register", register);
 authRouter.post("/login", login);
 authRouter.post("/logout", logout);
 
+
 // Export the router
 export default authRouter;
